@@ -2,28 +2,27 @@
 
 # pylint: disable=too-many-public-methods,too-many-instance-attributes
 
+import json
 import logging
+from pathlib import Path
+from uuid import uuid4
 
 import requests
-from requests.auth import HTTPBasicAuth
 
-import urllib3
-
-from .dyson_pure_cool import DysonPureCool
-from .dyson_pure_hotcool import DysonPureHotCool
-from .utils import is_360_eye_device, \
-    is_heating_device, is_dyson_pure_cool_device, is_heating_device_v2
-
-from .dyson_360_eye import Dyson360Eye
-from .dyson_pure_cool_link import DysonPureCoolLink
-from .dyson_pure_hotcool_link import DysonPureHotCoolLink
-from .exceptions import DysonNotLoggedException
+from libpurecool.device_helpers import get_dyson_device
+from libpurecool.exceptions import DysonNotLoggedInException
 
 _LOGGER = logging.getLogger(__name__)
 
 DYSON_API_URL = "appapi.cp.dyson.com"
 DYSON_API_URL_CN = "appapi.cp.dyson.cn"
-DYSON_API_USER_AGENT = "DysonLink/29019 CFNetwork/1188 Darwin/20.0.0"
+DYSON_API_USER_AGENT = f"android_client_{uuid4()}"
+
+DYSON_VERSION_PATH = "v1/provisioningservice/application/Android/version"
+DYSON_USERSTATUS_PATH = "v3/userregistration/email/userstatus"
+DYSON_AUTH_CHALLENGE_PATH = "v3/userregistration/email/auth"
+DYSON_VERIFY_PATH = "v3/userregistration/email/verify"
+DYSON_DEVICES_PATH = "v2/provisioningservice/manifest"
 
 
 class DysonAccount:
@@ -39,78 +38,105 @@ class DysonAccount:
         self._email = email
         self._password = password
         self._country = country
-        self._logged = False
-        self._auth = None
-        self._headers = {'User-Agent': DYSON_API_USER_AGENT}
+        self._cached_credentials = False
+        self._challenge_id = None
+        self._token_type = None
+        self._token = None
+        self._account = None
+        self._user_agent = DYSON_API_USER_AGENT
         if country == "CN":
-            self._dyson_api_url = DYSON_API_URL_CN
+            self._dyson_api_host = DYSON_API_URL_CN
         else:
-            self._dyson_api_url = DYSON_API_URL
+            self._dyson_api_host = DYSON_API_URL
+
+    def process_http_response(self, response):
+        if response.status_code == 429:
+            raise DysonNotLoggedInException(f'API request failure. Probably rate limited. Please try later. ({response.status_code}, {response.reason})')
+        if response.status_code == 401:
+            if self._cached_credentials:
+                raise DysonNotLoggedInException(f'API request failure. Cached credentials might be expired. ({response.status_code}, {response.reason})')
+            else:
+                raise DysonNotLoggedInException(f'API request failure. Invalid credentials or IP blocked. ({response.status_code}, {response.reason})')
+        if response.status_code != 200:
+            raise DysonNotLoggedInException(f'API request failure. Reason unknown. ({response.status_code}, {response.reason}')
+        return response.text
+
+    def version(self):
+        """Retrieve Dyson API version."""
+        r = requests.get(f'https://{self._dyson_api_host}/{DYSON_VERSION_PATH}?country={self._country}',
+                         headers={'User-Agent': self._user_agent})
+        self.process_http_response(r)
+        return r.text
+
+    def userstatus(self):
+        """Get status of API user."""
+        r = requests.post(f'https://{self._dyson_api_host}/{DYSON_USERSTATUS_PATH}?country={self._country}',
+                          headers={'User-Agent': self._user_agent},
+                          json={'Email': self._email})
+        self.process_http_response(r)
+        return json.loads(r.text)
+
+    def _get_challenge(self):
+        """Get API authentication token."""
+        r = requests.post(f'https://{self._dyson_api_host}/{DYSON_AUTH_CHALLENGE_PATH}?country={self._country}',
+                          headers={'User-Agent': self._user_agent},
+                          json={'Email': self._email})
+        self.process_http_response(r)
+        return json.loads(r.text)['challengeId']
 
     def login(self):
-        """Login to dyson web services."""
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        _LOGGER.debug("Disabling insecure request warnings since "
-                      "dyson are using a self signed certificate.")
-
-        request_body = {
-            "Email": self._email,
-            "Password": self._password
-        }
-        login = requests.post(
-            "https://{0}/v1/userregistration/authenticate?country={1}".format(
-                self._dyson_api_url, self._country),
-            headers=self._headers,
-            data=request_body,
-            verify=False
-        )
-        # pylint: disable=no-member
-        if login.status_code == requests.codes.ok:
-            json_response = login.json()
-            self._auth = HTTPBasicAuth(json_response["Account"],
-                                       json_response["Password"])
-            self._logged = True
+        """Login to the Dyson API and retrieve auth token."""
+        cache_dir = Path.home() / '.cache'
+        Path(cache_dir).mkdir(exist_ok=True)
+        if Path(cache_dir / 'dyson_api_authorization').exists():
+            self._cached_credentials = True
         else:
-            self._logged = False
-        return self._logged
+            self._cached_credentials = False
+            self._challenge_id = self._get_challenge()
+            otp_code = input("Enter OTP code sent to your email address: ")
+            r = requests.post(f'https://{self._dyson_api_host}/{DYSON_VERIFY_PATH}?country={self._country}',
+                              headers={'User-Agent': self._user_agent},
+                              json={'Email': self._email,
+                                    'Password': self._password,
+                                    'challengeId': self._challenge_id,
+                                    'otpCode': otp_code})
+            self.process_http_response(r)
+            Path(cache_dir / 'dyson_api_authorization').write_text(r.text)
+        auth_data = json.loads(Path(cache_dir / 'dyson_api_authorization').read_text())
+        self._account = auth_data['account']
+        self._token = auth_data['token']
+        self._token_type = auth_data['tokenType']
 
     def devices(self):
         """Return all devices linked to the account."""
-        if self._logged:
-            device_response = requests.get(
-                "https://{0}/v1/provisioningservice/manifest".format(
-                    self._dyson_api_url),
-                headers=self._headers,
-                verify=False,
-                auth=self._auth)
-            device_v2_response = requests.get(
-                "https://{0}/v2/provisioningservice/manifest".format(
-                    self._dyson_api_url),
-                headers=self._headers,
-                verify=False,
-                auth=self._auth)
-            devices = []
-            for device in device_response.json():
-                if is_360_eye_device(device):
-                    dyson_device = Dyson360Eye(device)
-                elif is_heating_device(device):
-                    dyson_device = DysonPureHotCoolLink(device)
-                else:
-                    dyson_device = DysonPureCoolLink(device)
-                devices.append(dyson_device)
+        if self._token is None:
+            raise DysonNotLoggedInException("Not logged in to Dyson Web Services.")
+        r = requests.get(f'https://{self._dyson_api_host}/{DYSON_DEVICES_PATH}?country={self._country}',
+                         headers={'User-Agent': self._user_agent,
+                                  'Authorization': f'{self._token_type} {self._token}'})
+        self.process_http_response(r)
+        return [get_dyson_device(jd) for jd in r.json()]
 
-            for device_v2 in device_v2_response.json():
-                if is_dyson_pure_cool_device(device_v2):
-                    devices.append(DysonPureCool(device_v2))
-                elif is_heating_device_v2(device_v2):
-                    devices.append(DysonPureHotCool(device_v2))
 
-            return devices
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    d = DysonAccount("sven@rexkramer.de", "wgzvwquXHBTWEtwsfQwNy8pC", "DE")
+    # print(d.version())
+    # print(d.userstatus())
+    d.login()
 
-        _LOGGER.warning("Not logged to Dyson Web Services.")
-        raise DysonNotLoggedException()
 
-    @property
-    def logged(self):
-        """Return True if user is logged, else False."""
-        return self._logged
+    def on_message(msg):
+        print(msg)
+
+    for i in d.devices():
+        i.connect("dyson.rexkramer.de")
+        # i.turn_off()
+        # print(i.serial)
+        # print(i.credentials)
+        # i.disable_oscillation()
+        # i.enable_oscillation()
+        i.add_message_listener(on_message)
+        from time import sleep
+        sleep(60)
+        i.disconnect()

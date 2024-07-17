@@ -2,54 +2,12 @@
 import json
 import base64
 from Crypto.Cipher import AES
-from .const import DYSON_PURE_HOT_COOL_LINK_TOUR, \
-    DYSON_360_EYE, DYSON_PURE_COOL, DYSON_PURE_COOL_DESKTOP, \
-    DYSON_PURE_HOT_COOL, DYSON_PURE_COOL_HUMIDIFY
 
 
-def support_heating(product_type):
-    """Return True if device_model support heating mode, else False.
-
-    :param product_type Dyson device model
-    """
-    if product_type in [DYSON_PURE_HOT_COOL_LINK_TOUR]:
-        return True
-    return False
-
-
-def support_heating_v2(product_type):
-    """Return True if v2 device_model support heating mode, else False.
-
-    :param product_type Dyson device model
-    """
-    if product_type in [DYSON_PURE_HOT_COOL]:
-        return True
-    return False
-
-
-def is_pure_cool_v2(product_type):
-    """Return True if it is a v2 dyson pure cool device.
-
-    :param product_type Dyson device model
-    """
-    if product_type in [DYSON_PURE_COOL, DYSON_PURE_COOL_DESKTOP,
-                        DYSON_PURE_HOT_COOL, DYSON_PURE_COOL_HUMIDIFY]:
-        return True
-    return False
-
-
-def is_heating_device(json_payload):
-    """Return true if this json payload is a hot+cool device."""
-    if json_payload['ProductType'] in [DYSON_PURE_HOT_COOL_LINK_TOUR]:
-        return True
-    return False
-
-
-def is_heating_device_v2(json_payload):
-    """Return true if this json payload is a v2 hot+cool device."""
-    if json_payload['ProductType'] in [DYSON_PURE_HOT_COOL]:
-        return True
-    return False
+def get_field_value(state, field):
+    """Get field value."""
+    return state[field][1] if isinstance(state[field], list) else state[
+        field]
 
 
 def printable_fields(fields):
@@ -58,7 +16,7 @@ def printable_fields(fields):
     :param fields list of tuble with (label, vallue)
     """
     for field in fields:
-        yield field[0]+"="+field[1]
+        yield field[0] + "=" + field[1]
 
 
 def unpad(string):
@@ -79,25 +37,3 @@ def decrypt_password(encrypted_password):
     json_password = json.loads(unpad(
         cipher.decrypt(base64.b64decode(encrypted_password)).decode('utf-8')))
     return json_password["apPasswordHash"]
-
-
-def is_360_eye_device(json_payload):
-    """Return true if this json payload is a Dyson 360 Eye device."""
-    if json_payload['ProductType'] == DYSON_360_EYE:
-        return True
-    return False
-
-
-def is_dyson_pure_cool_device(json_payload):
-    """Return true if this json payload is a v2 dyson pure cool device."""
-    if json_payload['ProductType'] in [DYSON_PURE_COOL,
-                                       DYSON_PURE_COOL_DESKTOP,
-                                       DYSON_PURE_COOL_HUMIDIFY]:
-        return True
-    return False
-
-
-def get_field_value(state, field):
-    """Get field value."""
-    return state[field][1] if isinstance(state[field], list) else state[
-        field]

@@ -8,8 +8,8 @@ import json
 import abc
 import time
 
-from .utils import printable_fields
-from .utils import decrypt_password
+from libpurecool.utils import printable_fields
+from libpurecool.utils import decrypt_password
 
 _LOGGER = logging.getLogger(__name__)
 

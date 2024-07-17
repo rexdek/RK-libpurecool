@@ -2,8 +2,8 @@
 
 import logging
 
-from .dyson_pure_cool_link import DysonPureCoolLink
-from .utils import printable_fields
+from libpurecool.dyson_pure_cool_link import DysonPureCoolLink
+from libpurecool.utils import printable_fields
 
 _LOGGER = logging.getLogger(__name__)
 

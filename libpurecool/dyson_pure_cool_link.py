@@ -12,15 +12,14 @@ from queue import Queue, Empty
 
 import paho.mqtt.client as mqtt
 
-from .dyson_pure_state_v2 import \
-    DysonEnvironmentalSensorV2State, DysonPureCoolV2State, \
-    DysonPureHotCoolV2State
-from .dyson_device import DysonDevice, NetworkDevice, DEFAULT_PORT
-from .utils import printable_fields, support_heating, is_pure_cool_v2, \
-    support_heating_v2
-from .dyson_pure_state import DysonPureHotCoolState, DysonPureCoolState, \
+from libpurecool.dyson_device import DysonDevice, NetworkDevice, DEFAULT_PORT
+from libpurecool.state_helpers import get_state_msg, get_environmental_sensor_msg
+from libpurecool.utils import printable_fields
+from libpurecool.dyson_pure_state import (
+    DysonPureCoolState,
     DysonEnvironmentalSensorState
-from .zeroconf import ServiceBrowser, Zeroconf
+)
+from libpurecool.zeroconf import ServiceBrowser, Zeroconf
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,30 +84,17 @@ class DysonPureCoolLink(DysonDevice):
         """Set function Callback when message received."""
         payload = msg.payload.decode("utf-8")
         if DysonPureCoolState.is_state_message(payload):
-            if support_heating(userdata.product_type):
-                device_msg = DysonPureHotCoolState(payload)
-            elif support_heating_v2(userdata.product_type):
-                device_msg = DysonPureHotCoolV2State(payload)
-            elif is_pure_cool_v2(userdata.product_type):
-                device_msg = DysonPureCoolV2State(payload)
-            else:
-                device_msg = DysonPureCoolState(payload)
             if not userdata.device_available:
                 userdata.state_data_available()
-            userdata.state = device_msg
+            userdata.state = get_state_msg(userdata.product_type, payload)
             for function in userdata.callback_message:
-                function(device_msg)
-        elif DysonEnvironmentalSensorState.is_environmental_state_message(
-                payload):
-            if is_pure_cool_v2(userdata.product_type):
-                device_msg = DysonEnvironmentalSensorV2State(payload)
-            else:
-                device_msg = DysonEnvironmentalSensorState(payload)
+                function(userdata.state)
+        elif DysonEnvironmentalSensorState.is_environmental_state_message(payload):
             if not userdata.device_available:
                 userdata.sensor_data_available()
-            userdata.environmental_state = device_msg
+            userdata.environmental_state = get_environmental_sensor_msg(userdata.product_type, payload)
             for function in userdata.callback_message:
-                function(device_msg)
+                function(userdata.environmental_state)
         else:
             _LOGGER.warning("Unknown message: %s", payload)
 

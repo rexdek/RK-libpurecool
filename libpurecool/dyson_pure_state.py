@@ -3,7 +3,7 @@
 # pylint: disable=too-many-public-methods,too-many-instance-attributes
 
 import json
-from .utils import printable_fields
+from libpurecool.utils import printable_fields
 
 
 class DysonPureCoolState:

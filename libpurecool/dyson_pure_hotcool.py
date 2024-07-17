@@ -2,9 +2,9 @@
 
 import logging
 
-from .const import HeatMode
-from .dyson_pure_cool import DysonPureCool
-from .utils import printable_fields
+from libpurecool.const import HeatMode
+from libpurecool.dyson_pure_cool import DysonPureCool
+from libpurecool.utils import printable_fields
 
 _LOGGER = logging.getLogger(__name__)
 

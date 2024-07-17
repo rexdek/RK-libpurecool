@@ -39,9 +39,6 @@ class DysonInvalidTargetTemperatureException(Exception):
                    "between 34 to 98 inclusive.".format(self._current_value)
 
 
-class DysonNotLoggedException(Exception):
-    """Not logged to Dyson Web Services Exception."""
-
-    def __init__(self):
-        """Dyson Not Logged Exception."""
-        super(DysonNotLoggedException, self).__init__()
+class DysonNotLoggedInException(Exception):
+    """Not logged in to Dyson Web Services Exception."""
+    pass

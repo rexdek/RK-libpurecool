@@ -1,12 +1,11 @@
 """Dyson Pure Cool Link constants."""
 
 from enum import Enum
-from .exceptions import DysonInvalidTargetTemperatureException as DITTE
+from libpurecool.exceptions import DysonInvalidTargetTemperatureException as DITTE
 
 DYSON_PURE_COOL_LINK_TOUR = "475"
 DYSON_PURE_COOL_LINK_DESK = "469"
 DYSON_PURE_HOT_COOL_LINK_TOUR = "455"
-DYSON_360_EYE = "N223"
 DYSON_PURE_COOL = "438"
 DYSON_PURE_COOL_HUMIDIFY = "358"
 DYSON_PURE_COOL_DESKTOP = "520"
