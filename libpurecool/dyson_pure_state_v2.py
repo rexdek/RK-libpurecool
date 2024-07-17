@@ -4,8 +4,8 @@
 
 import json
 
-from libpurecool.const import SENSOR_INIT_STATES
-from libpurecool.utils import printable_fields, get_field_value
+from .const import SENSOR_INIT_STATES
+from .utils import printable_fields, get_field_value
 
 
 class DysonPureCoolV2State:

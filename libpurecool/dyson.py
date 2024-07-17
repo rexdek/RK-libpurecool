@@ -9,7 +9,17 @@ from uuid import uuid4
 
 import requests
 
-from libpurecool.device_helpers import get_dyson_device
+from libpurecool.dyson_pure_cool import DysonPureCool
+from libpurecool.dyson_pure_hotcool import DysonPureHotCool
+from libpurecool.utils import (
+    is_360_eye_device,
+    is_heating_device,
+    is_dyson_pure_cool_device,
+    is_heating_device_v2
+)
+from libpurecool.dyson_360_eye import Dyson360Eye
+from libpurecool.dyson_pure_cool_link import DysonPureCoolLink
+from libpurecool.dyson_pure_hotcool_link import DysonPureHotCoolLink
 from libpurecool.exceptions import DysonNotLoggedInException
 
 _LOGGER = logging.getLogger(__name__)
@@ -115,7 +125,23 @@ class DysonAccount:
                          headers={'User-Agent': self._user_agent,
                                   'Authorization': f'{self._token_type} {self._token}'})
         self.process_http_response(r)
-        return [get_dyson_device(jd) for jd in r.json()]
+        devices = []
+        for device in r.json():
+            if is_360_eye_device(device):
+                dyson_device = Dyson360Eye(device)
+            elif is_heating_device(device):
+                dyson_device = DysonPureHotCoolLink(device)
+            else:
+                dyson_device = DysonPureCoolLink(device)
+            devices.append(dyson_device)
+
+        for device_v2 in r.json():
+            if is_dyson_pure_cool_device(device_v2):
+                devices.append(DysonPureCool(device_v2))
+            elif is_heating_device_v2(device_v2):
+                devices.append(DysonPureHotCool(device_v2))
+
+        return devices
 
 
 if __name__ == "__main__":
